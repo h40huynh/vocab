@@ -165,6 +165,7 @@ export const css = `
   .remote-url-input { flex: 1; min-width: 220px; }
   .remember-url-check { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 0.76rem; color: #9ca3c0; user-select: none; }
   .remember-url-check input { accent-color: #6366f1; }
+  .remote-loader-note { margin-top: 8px; font-size: 0.72rem; color: #7a7fa0; }
   .saved-urls-wrap { margin-top: 12px; border-top: 1px solid #2d3045; padding-top: 10px; }
   .saved-urls-title { font-size: 0.72rem; color: #7a7fa0; text-transform: uppercase; letter-spacing: 0.45px; margin-bottom: 8px; }
   .saved-urls-list { display: flex; flex-direction: column; gap: 8px; max-height: 170px; overflow-y: auto; padding-right: 2px; }
@@ -185,6 +186,7 @@ export const css = `
   .btn-download { background: none; border-color: #3a3d52; color: #7a7fa0; } .btn-download:hover { border-color: #22c55e; color: #4ade80; background: #0f2d1e; }
   .btn-delete { background: none; border-color: #3a3d52; color: #7a7fa0; } .btn-delete:hover { border-color: #ef4444; color: #f87171; background: #2d0f0f; }
   .built-in-badge { font-size: 0.6rem; background: #252847; color: #6366f1; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+  .session-badge { font-size: 0.6rem; background: #2d2200; color: #facc15; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
 
   /* Raw editor */
   .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }

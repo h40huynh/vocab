@@ -1,10 +1,12 @@
 export default function ManageView({
   files,
   userFiles,
+  sessionRemoteFiles,
   normalizeTopicKey,
   normalizeSubtopicKey,
   onDownloadFile,
   onPreviewFile,
+  onDeleteFile,
   remoteUrlInput,
   rememberRemoteUrl,
   remoteLoading,
@@ -52,6 +54,10 @@ export default function ManageView({
           Save this URL and auto-load on next visit
         </label>
 
+        <div className="remote-loader-note">
+          URL files are loaded temporarily in this session. When saved, only the URL is stored.
+        </div>
+
         <div className="saved-urls-wrap">
           <div className="saved-urls-title">Saved URLs ({savedRemoteUrls.length})</div>
 
@@ -91,6 +97,9 @@ export default function ManageView({
         {Object.entries(files).map(([filename, file]) => {
           const fileTopicKeys = new Set(file.words.map(word => normalizeTopicKey(word.topic || "")));
           const fileSubtopicKeys = new Set(file.words.map(word => normalizeSubtopicKey(word.subtopic || "")));
+          const isPersistedUserFile = !!userFiles[filename];
+          const isSessionRemoteFile = !!sessionRemoteFiles[filename];
+          const isBuiltInFile = !isPersistedUserFile && !isSessionRemoteFile;
 
           return (
             <div key={filename} className="manage-card">
@@ -107,11 +116,15 @@ export default function ManageView({
               <div className="manage-card-actions" style={{ marginBottom: 4 }}>
                 <span style={{ fontSize: "0.72rem", color: "#5a5e7a", flex: 1 }}>
                   {filename}
-                  {!userFiles[filename] && <span className="built-in-badge" style={{ marginLeft: 6 }}>built-in</span>}
+                  {isBuiltInFile && <span className="built-in-badge" style={{ marginLeft: 6 }}>built-in</span>}
+                  {isSessionRemoteFile && <span className="session-badge" style={{ marginLeft: 6 }}>session</span>}
                 </span>
 
                 <button className="btn-sm btn-download" onClick={() => onDownloadFile(filename)}>⬇️</button>
                 <button className="btn-sm btn-edit" onClick={() => onPreviewFile(filename)}>👁</button>
+                {!isBuiltInFile && (
+                  <button className="btn-sm btn-delete" onClick={() => onDeleteFile(filename)}>🗑️</button>
+                )}
               </div>
             </div>
           );

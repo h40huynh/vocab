@@ -120,6 +120,7 @@ export default function VocabApp() {
 
   const [files, setFiles] = useState(initialData.parsed);
   const [userFiles, setUserFiles] = useState(initialData.uf);
+  const [sessionRemoteFiles, setSessionRemoteFiles] = useState({});
   const [activeKey, setActiveKey] = useState(null);
   const [activeSource, setActiveSource] = useState(null);
   const [view, setView] = useState("cards");
@@ -136,6 +137,7 @@ export default function VocabApp() {
   const [toast, setToast] = useState(null);
   const fileInputRef = useRef();
   const hasAutoLoadedRemoteRef = useRef(false);
+  const importRemoteUrlRef = useRef(null);
 
   const showToast = useCallback((msg, type = "success") => {
     setToast({ msg, type });
@@ -286,14 +288,31 @@ export default function VocabApp() {
       return updated;
     });
 
-    setUserFiles(prev => {
+    setSessionRemoteFiles(prev => {
       const updated = { ...prev };
       imported.forEach(item => { updated[item.filename] = item.content; });
-      persistStorage(updated, starred, nextUrls);
       return updated;
     });
 
+    let nextUserFiles = userFiles;
+    let userFilesChanged = false;
+
+    for (const item of imported) {
+      if (Object.prototype.hasOwnProperty.call(nextUserFiles, item.filename)) {
+        if (!userFilesChanged) nextUserFiles = { ...nextUserFiles };
+        delete nextUserFiles[item.filename];
+        userFilesChanged = true;
+      }
+    }
+
+    if (userFilesChanged) {
+      setUserFiles(nextUserFiles);
+    }
+
     if (saveUrl) setSavedRemoteUrls(nextUrls);
+    if (saveUrl || userFilesChanged) {
+      persistStorage(nextUserFiles, starred, nextUrls);
+    }
 
     setActiveSource(imported[0].filename);
     setActiveKey(null);
@@ -306,12 +325,14 @@ export default function VocabApp() {
         ? `Loaded "${imported[0].parsed.title}"`
         : `Loaded ${imported.length} files`;
       const skippedLabel = skipped > 0 ? ` · skipped ${skipped} non-vocab file${skipped > 1 ? "s" : ""}` : "";
-      const savedLabel = saveUrl ? " · URL saved" : "";
+      const savedLabel = saveUrl ? " · URL saved (auto-load enabled)" : " · session only";
       showToast(`✅ ${importedLabel}${skippedLabel}${savedLabel}`);
     }
 
     return { importedCount: imported.length };
-  }, [persistStorage, savedRemoteUrls, showToast, starred]);
+  }, [persistStorage, savedRemoteUrls, showToast, starred, userFiles]);
+
+  importRemoteUrlRef.current = importRemoteUrl;
 
   const loadRemoteFromInput = async () => {
     const candidate = remoteUrlInput.trim();
@@ -362,18 +383,21 @@ export default function VocabApp() {
       setRemoteLoading(true);
       let success = 0;
 
-      for (const url of urls) {
-        if (cancelled) return;
-        try {
-          const result = await importRemoteUrl(url, { saveUrl: false, silent: true });
-          if (result.importedCount > 0) success += 1;
-        } catch {
-          // Keep going so one bad URL does not block others.
+      try {
+        for (const url of urls) {
+          if (cancelled) break;
+          try {
+            const result = await importRemoteUrlRef.current(url, { saveUrl: false, silent: true });
+            if (result.importedCount > 0) success += 1;
+          } catch {
+            // Keep going so one bad URL does not block others.
+          }
         }
+      } finally {
+        setRemoteLoading(false);
       }
 
       if (cancelled) return;
-      setRemoteLoading(false);
 
       const failed = urls.length - success;
       if (failed === 0) {
@@ -388,7 +412,7 @@ export default function VocabApp() {
     return () => {
       cancelled = true;
     };
-  }, [importRemoteUrl, initialData.remoteUrls, showToast]);
+  }, [initialData.remoteUrls, showToast]);
 
   const handleFileUpload = (e) => {
     const uploadedFiles = Array.from(e.target.files);
@@ -422,12 +446,94 @@ export default function VocabApp() {
   };
 
   const downloadFile = (fn) => {
-    const content = userFiles[fn] || BUNDLED_FILES[fn] || "";
+    const content = userFiles[fn] || sessionRemoteFiles[fn] || BUNDLED_FILES[fn] || "";
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = fn; a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const deleteFile = (fn) => {
+    const file = files[fn];
+    if (!file) return;
+
+    const isPersistedUserFile = Object.prototype.hasOwnProperty.call(userFiles, fn);
+    const isSessionRemoteFile = Object.prototype.hasOwnProperty.call(sessionRemoteFiles, fn);
+
+    if (!isPersistedUserFile && !isSessionRemoteFile) {
+      showToast("Built-in files cannot be deleted", "error");
+      return;
+    }
+
+    if (!window.confirm(`Delete "${file.title}" from app?`)) return;
+
+    const nextFiles = { ...files };
+    delete nextFiles[fn];
+    setFiles(nextFiles);
+
+    if (activeSource === fn) {
+      setActiveSource(null);
+      setActiveKey(null);
+      setView("cards");
+      resetBrowseState();
+    }
+
+    let nextUserFiles = userFiles;
+    if (isPersistedUserFile) {
+      nextUserFiles = { ...userFiles };
+      delete nextUserFiles[fn];
+      setUserFiles(nextUserFiles);
+    }
+
+    if (isSessionRemoteFile) {
+      setSessionRemoteFiles(prev => {
+        const updated = { ...prev };
+        delete updated[fn];
+        return updated;
+      });
+    }
+
+    const idsToDrop = new Set(file.words.map(word => word.id));
+    if (idsToDrop.size > 0) {
+      setFlipped(prev => {
+        let changed = false;
+        const updated = { ...prev };
+
+        idsToDrop.forEach(id => {
+          if (updated[id]) {
+            delete updated[id];
+            changed = true;
+          }
+        });
+
+        return changed ? updated : prev;
+      });
+    }
+
+    let nextStarred = starred;
+    let starredChanged = false;
+
+    if (idsToDrop.size > 0) {
+      const updatedStarred = { ...starred };
+      idsToDrop.forEach(id => {
+        if (Object.prototype.hasOwnProperty.call(updatedStarred, id)) {
+          delete updatedStarred[id];
+          starredChanged = true;
+        }
+      });
+
+      if (starredChanged) {
+        nextStarred = updatedStarred;
+        setStarred(updatedStarred);
+      }
+    }
+
+    if (isPersistedUserFile || starredChanged) {
+      persistStorage(nextUserFiles, nextStarred, savedRemoteUrls);
+    }
+
+    showToast(`🗑️ Removed "${file.title}"`);
   };
 
   const buildChoices = (word, all) => {
@@ -599,10 +705,12 @@ export default function VocabApp() {
               <ManageView
                 files={files}
                 userFiles={userFiles}
+                sessionRemoteFiles={sessionRemoteFiles}
                 normalizeTopicKey={normalizeTopicKey}
                 normalizeSubtopicKey={normalizeSubtopicKey}
                 onDownloadFile={downloadFile}
                 onPreviewFile={previewFile}
+                onDeleteFile={deleteFile}
                 remoteUrlInput={remoteUrlInput}
                 rememberRemoteUrl={rememberRemoteUrl}
                 remoteLoading={remoteLoading}
